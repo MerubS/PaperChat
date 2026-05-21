@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/test.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +19,7 @@
     "@langchain/pinecone": "^1.0.3",
     "@langchain/textsplitters": "^1.0.1",
     "@pinecone-database/pinecone": "^7.2.0",
+    "@tailwindcss/postcss": "^4.3.0",
     "dotenv": "^16.6.1",
     "langchain": "^1.4.1",
     "next": "^16.2.6",
@@ -31,6 +33,9 @@
     "@types/node": "^24.12.4",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
