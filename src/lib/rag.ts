@@ -4,7 +4,7 @@ import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { PineconeStore } from '@langchain/pinecone';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { createStuffDocumentsChain } from 'langchain/chains/combine_docs_stuff';
+import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
 import { createRetrievalChain } from 'langchain/chains/retrieval';
 import * as dotenv from 'dotenv';
 import OpenAI from 'openai';
@@ -89,16 +89,22 @@ export async function queryDocument(query: string, documentId: string) {
             modelName: 'gpt-4',
         });
 
-        const prompt = ChatPromptTemplate.fromMessages([`Answer the user's question based on the following context: {context} Question: {query}`]);
-        const combineDocumentsChain = await createStuffDocumentsChain({ llm: model, prompt });
-        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever(), combineDocumentsChain });
-        // const chain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever(), {
-        //     k: 3,
-        // });
+        const prompt = ChatPromptTemplate.fromMessages([
+            ["system", `You are a helpful research assistant.
+Answer the question based ONLY on the provided context from the research paper.
+If the answer is not in the context, say "I couldn't find that information in the paper."
+
+Context: {context}`],
+            ["human", "{input}"]  
+        ]);
+        const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
+        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever(), combineDocsChain });
+      
 
         const response = await chain.invoke({ input: query });
         console.log('Query response generated successfully.');
-        return { success: true, response: response.text , query: query };
+        // console.log('Full response:', JSON.stringify(response, null, 2));
+        return { success: true, response: response.answer , query: query };
     } catch (error) {
         console.error('Error querying document:', error);
         throw error;
