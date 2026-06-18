@@ -10,10 +10,6 @@
 
 ---
 
-![PaperChat Upload Screen](./public/screenshots/upload.png)
-
----
-
 ## 📌 Overview
 
 PaperChat is a full-stack RAG (Retrieval-Augmented Generation) application that allows users to upload research papers and ask questions about them in natural language. Instead of reading through pages of dense academic text, users can get instant, accurate answers grounded in the paper's content.
@@ -38,10 +34,10 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 ## 🖥️ Screenshots
 
 ### Upload Screen
-![Upload Screen](./public/screenshots/upload.png)
+![Upload Screen](./public/paperchat_upload.png)
 
 ### Chat Interface
-![Chat Interface](./public/screenshots/chat.png)
+![Chat Interface](./public/paperchat_chat.png)
 
 
 
