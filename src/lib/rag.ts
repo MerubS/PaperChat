@@ -50,7 +50,7 @@ export async function uploadPDF(pdfUrl: string , documentId: string ) {
       };
     });
 
-    const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 1000, chunkOverlap: 200 });
+    const splitter = new RecursiveCharacterTextSplitter({  chunkSize: 500, chunkOverlap: 150});
     const chunks = await splitter.splitDocuments(documents);
     console.log('PDF split into chunks. Number of chunks:', chunks.length);
 
@@ -114,7 +114,7 @@ Context from the research paper: {context}`],
             ["human", "{input}"]  
         ]);
         const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
-        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever(), combineDocsChain });
+        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever({ k: 6 }), combineDocsChain });
       
 
         const response = await chain.invoke({ input: query });
