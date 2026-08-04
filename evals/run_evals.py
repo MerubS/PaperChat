@@ -127,7 +127,7 @@ for paper_name, questions in papers.items():
 
         try:
             # Retrieve relevant chunks
-            retrieved_docs = vector_store.similarity_search(question, k=4)
+            retrieved_docs = vector_store.similarity_search(question, k=6)
             contexts = [doc.page_content for doc in retrieved_docs]
 
             if not contexts:
