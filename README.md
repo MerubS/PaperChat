@@ -18,7 +18,7 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 
 ---
 
-## ✨ Features
+## Features
 
 - **📤 Drag & Drop Upload** — Upload any PDF research paper instantly
 - **🧠 Semantic Search** — Finds relevant sections by meaning, not just keywords
@@ -31,7 +31,7 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 
 ---
 
-## 🖥️ Screenshots
+## Screenshots
 
 ### Upload Screen
 ![Upload Screen](./public/paperchat_upload.png)
@@ -43,7 +43,7 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 
 ---
 
-## 🏗️ How It Works
+## How It Works
 
 PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
 
@@ -60,12 +60,70 @@ PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
      ↓
 ❓ User asks question
      ↓
-🔍 Semantic Search       (Pinecone similarity search - top 3 chunks)
+🔍 Semantic Search       (Pinecone similarity search - top 6 chunks)
      ↓
 🤖 Answer Generation     (GPT-4 + retrieved context)
      ↓
 💡 Answer returned to user
 ```
+
+---
+## 📊 Evaluation Results
+
+PaperChat was evaluated using **[RAGAS](https://docs.ragas.io/)** — the industry-standard RAG evaluation framework — measuring four metrics across 20 domain-specific questions on two accessibility research papers.
+
+### 📐 Metrics Explained
+
+| Metric | What It Measures | Target |
+|--------|-----------------|--------|
+| **Faithfulness** | Are answers grounded in retrieved chunks? Low score = hallucination | > 0.85 |
+| **Answer Relevancy** | Do answers directly address the question asked? | > 0.85 |
+| **Context Precision** | Are retrieved chunks actually relevant to the question? | > 0.85 |
+| **Context Recall** | Did retrieval find all necessary information from the paper? | > 0.85 |
+
+
+### 🔄 Iteration History — 5 Rounds of Improvement
+
+The system was improved through **5 data-driven iterations**, each targeting a specific weakness identified by RAGAS scores:
+
+| # | Change | Faithful | Relevancy | Precision | Recall | Key Finding |
+|---|--------|----------|-----------|-----------|--------|-------------|
+| 1 | Baseline | 0.650 | 0.463 | 0.964 | 0.850 | Retrieval strong, generation weak |
+| 2 | Tightened system prompt | 0.859 | 0.709 | 0.968 | 0.850 | Faithfulness +32%, Relevancy +53% |
+| 3 | Added answer format rules | 0.775 | 0.757 | 0.979 | 0.787 | Relevancy improved further |
+| 4 | chunkSize 1000 → 500 | 0.909 | 0.750 | 0.961 | 0.733 | Faithfulness best, recall dropped |
+| 5 | Retrieval k: 4 → 6 | **0.873** | **0.900** | **0.972** | **0.917** | All metrics above 0.85 ✅ |
+
+> **Key Insight:** Chunk size and retrieval `k` are coupled parameters. Reducing chunk size improves faithfulness by providing cleaner context, but hurts recall because each chunk covers less content. Increasing `k` compensates by retrieving more chunks, recovering recall while maintaining precision gains. Final configuration: `chunkSize=500, k=6`.
+
+### 🏆 Final Scores
+
+Evaluated on 2 accessibility research papers:
+- *"One Does Not Simply 'Mm-hmm': Exploring Backchanneling in the AAC Micro-Culture"* — ACM ASSETS '25
+- *"Wheelchair Proxemics: Interpersonal Behaviour Between Pedestrians and Power Wheelchair Drivers"* — ACM VRST '24
+
+| Metric | AAC Paper | Proxemics Paper | Average |
+|--------|-----------|-----------------|---------|
+| **Faithfulness** | 0.913 | 0.833 | **0.873** |
+| **Answer Relevancy** | 0.853 | 0.947 | **0.900** |
+| **Context Precision** | 0.955 | 0.988 | **0.972** |
+| **Context Recall** | 0.867 | 0.967 | **0.917** |
+
+✅ RAGAS Diagnosis: *"All metrics look good! Your RAG system is performing well."*
+
+### 🧪 Run Evals Yourself
+
+```bash
+# Install Python dependencies
+pip install ragas langchain-openai langchain-pinecone pinecone python-dotenv datasets
+
+# Run evaluation pipeline
+python evals/run_evals.py
+```
+
+Results are saved to `evals/results.json`.
+
+The eval dataset (`evals/dataset.json`) contains 20 ground-truth question-answer pairs across both papers, covering factual questions, methodology questions, and finding-based questions.
 
 ---
 
@@ -84,7 +142,7 @@ PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -221,7 +279,7 @@ Queries the document and returns an AI-generated answer.
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Customize the RAG pipeline in `src/lib/rag.ts`:
 
@@ -246,7 +304,7 @@ const model = new ChatOpenAI({
 
 ---
 
-## 🚢 Deployment
+## Deployment
 
 ### Deploy to Vercel
 
@@ -266,7 +324,7 @@ PINECONE_INDEX_NAME=paperchat
 
 ---
 
-## 🤔 Why RAG?
+## Why RAG?
 
 Traditional LLMs can only answer based on their training data. RAG solves this by:
 
