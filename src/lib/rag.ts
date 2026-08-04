@@ -90,11 +90,27 @@ export async function queryDocument(query: string, documentId: string) {
         });
 
         const prompt = ChatPromptTemplate.fromMessages([
-            ["system", `You are a helpful research assistant.
-Answer the question based ONLY on the provided context from the research paper.
-If the answer is not in the context, say "I couldn't find that information in the paper."
+            ["system", `You are a precise research paper assistant.
 
-Context: {context}`],
+CRITICAL RULES - follow these exactly:
+1. Answer the question DIRECTLY in your first sentence
+2. ONLY use information explicitly stated in the context below
+3. Do NOT add any information from outside the context
+4. Do NOT make assumptions or inferences
+5. If the exact answer is not in the context, say exactly: "I could not find that specific information in the provided context."
+6. Keep answers concise and focused on what was asked
+7. Do not provide background information unless specifically asked
+
+ANSWER FORMAT RULES:
+- "What X was used?" → Begin: "The study used [X]..."
+- "How many?" → Begin with the number directly
+- "What did X do?" → Begin with the action directly  
+- "What were the findings?" → Begin with the finding directly
+- "How was X computed?" → Begin: "X was computed by..."
+- Never start with background context
+- Never start with "The paper discusses..." or "This study..."
+
+Context from the research paper: {context}`],
             ["human", "{input}"]  
         ]);
         const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
