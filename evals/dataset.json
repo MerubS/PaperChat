@@ -1,0 +1,122 @@
+[
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What is backchanneling and why is it important?",
+    "ground_truth": "Backchanneling refers to verbal and non-verbal cues such as 'uh-huh', 'hmm', nods, and gestures that help negotiate turn-taking in conversation, signal engagement, and shape conversational flow. It composes 19% of communication according to Jurafsky et al. It is particularly important for AAC users who face unique challenges in producing timely backchanneling signals."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "How many participants were in the co-design workshop?",
+    "ground_truth": "Four AAC users participated in the co-design workshop, along with two person-centered technology specialists from YAI. Two participants were part-time AAC users (P3, P4) and two were full-time AAC users (P1, P2). All participants had motor disabilities ranging from mild to profound."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What are the six functions of backchanneling defined by Senk?",
+    "ground_truth": "Senk defined six functions of backchanneling: (1) continuer, (2) understanding, (3) support and empathy, (4) agreement, (5) emotive, and (6) minor additions."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What unique backchanneling modalities did AAC participants use?",
+    "ground_truth": "Participants used facial expressions, head nods, sign language gestures, sighing, raising their wheelchair chair to express interest, eyebrow movements, eye contact, and verbal backchanneling such as 'yeah' and 'yes'. P3 used saying 'one sec' as backchanneling. P1 made beep noises from her chair to signal stepping away."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What were the main challenges AAC users faced in backchanneling?",
+    "ground_truth": "Main challenges included timing constraints because AAC typing requires visual and motor focus, leading to delays or missed backchanneling opportunities. Physical access to devices complicated real-time signaling. AAC users were sometimes locked out of conversation rhythm. The device focus made visual backchanneling from partners easy to miss."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "How did backchanneling differ in AAC-to-AAC versus AAC-to-non-AAC interactions?",
+    "ground_truth": "In AAC-to-AAC interactions, both users looked down while typing causing near-complete loss of eye contact and missed visual cues. In AAC-to-non-AAC interactions, non-AAC partners relied on echoic backchanneling by repeating the AAC user's last words with rising intonation to confirm understanding. Non-AAC partners adapted their listening approach over time using fewer, more targeted prompts."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What did Speech-Language Pathologists say about backchanneling in their training?",
+    "ground_truth": "None of the four SLPs used the specific term backchanneling in their clinical training or documentation. They described related behaviors using broader terms like active-listening, non-verbal communication, and pragmatic language skills. They had no formal backchanneling curriculum but addressed it informally through noticing, modeling, and programming. SLP2 stated the topic was under-explored and she had never been explicitly taught to address it."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What design recommendations did the paper make for AAC technology?",
+    "ground_truth": "Three design opportunities were identified: (1) Fast, low-effort cues such as multi-modal feedback triggers like eyebrow-detection or vibration cues that complement typing without interrupting it. (2) Real-time customizable expressive shortcuts allowing emotion-tagged presets like 'surprised mm-hmm' or 'agreeing hmm'. (3) Partner-aware timing support such as visualizing floor dynamics showing when a partner is typing or offering predictive timing aids."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What is the AAC micro-culture concept described in the paper?",
+    "ground_truth": "The AAC micro-culture refers to the locally negotiated communication style that AAC users develop for backchanneling, using a wealth of multi-modal cues. This culture shifts with partner composition and differs from mainstream non-AAC communication norms. The paper argues that designing AAC technology should respect and not override this existing micro-culture rather than imposing generic cultural norms."
+  },
+  {
+    "paper": "aac",
+    "document_id": "aac",
+    "question": "What was the positionality statement in the paper?",
+    "ground_truth": "The lead author has been an AAC user for 13 years due to a neuromotor disease that manifested when he was a teenager, limiting his speech and movement. His lived experience as an AAC user shaped the research process. He noted challenges like being unable to type while maintaining eye contact and being perceived as disengaged when typing on his phone during conversations."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What is the main objective of the wheelchair proxemics study?",
+    "ground_truth": "The main objective was to leverage immersive simulations of public areas to provide a new training tool for power wheelchair (PWC) users by studying interpersonal distance regulation (proxemics) between pedestrians and PWC users in real and virtual environments, and to compare avoidance behavior in both conditions."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "How many participants were in the wheelchair proxemics study?",
+    "ground_truth": "23 participants (8 males, 14 females, 1 non-binary) with an average age of 35.6 years, ranging from 21-62 years old, with 20 being right-handed and shoulder width of 46.7cm plus or minus 4.96cm volunteered for the experiment."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What were the two main hypotheses of Study 1?",
+    "ground_truth": "H1: Interpersonal distances during pedestrian-PWC user interactions will be greater than those observed during pedestrian-pedestrian interactions. H2: The orientation of the human obstacle to be avoided will affect interpersonal distances due to the asymmetric nature of personal space, both when interacting with a pedestrian or a PWC obstacle."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What was the shape-to-shape distance finding in Study 1?",
+    "ground_truth": "There was a significant main effect of locomotion mode on shape-to-shape distance. The distance was greater when driving a PWC than when walking. It was smaller when participants passed to the back of the obstacle compared to other sides. There was also an interaction effect where the shape-to-shape distance was smaller to the back than front while driving, but bigger when walking."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "How did walking speed differ between real and virtual environments in Study 2?",
+    "ground_truth": "Participants walked significantly slower in VR (1.21 plus or minus 0.14 m/s) than in real conditions (1.52 plus or minus 0.15 m/s). This was a significant main effect of the environment on walking speed."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What side of avoidance did participants prefer when walking past a PWC user?",
+    "ground_truth": "When walking, participants passed the PWC user obstacle as many times to the left (47.2%) as to the right (52.8%). However, they passed more to the back (73%) than to the front (27%) of the PWC user obstacle. The locomotion mode did not affect the left-right or front-back strategy."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What VR apparatus was used in the virtual condition?",
+    "ground_truth": "In the virtual condition, participants wore a backpack (HP VR Backpack G2 running Unity 2021.3) and a virtual reality helmet with a wide field of view (Pimax 5k, FoV 120 degrees). Four cameras recorded their movements using SteamVR Base Station 2.0."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What guidelines did the paper propose for wheelchair simulator developers?",
+    "ground_truth": "Three guidelines were proposed: (1) The shape-to-shape distances should be specifically tuned with respect to the side of avoidance. (2) The virtual pedestrian should preferentially walk behind the wheelchair user. (3) The virtual pedestrian has the option of passing indifferently to the right or left of the wheelchair user."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "How was the shape-to-shape distance computed in this study?",
+    "ground_truth": "Shape-to-shape distance was computed using an approximation of the shapes of the pedestrian and PWC user. Unlike typical pedestrian-pedestrian studies that compute distances from body centers, the wheelchair reference frame was defined at its center to account for asymmetric shapes. The Y axis was in the antero-posterior direction of pedestrian motion and X axis in the medio-lateral direction."
+  },
+  {
+    "paper": "proxemics",
+    "document_id": "proxemics",
+    "question": "What crowd simulation algorithm was used in the proof of concept?",
+    "ground_truth": "The paper adapted the crowd simulation library UMANS using the state-of-the-art standard crowd simulation algorithm ORCA through the UMANS framework, modified with their implementation of proxemics-based agents instead of radius-based agents to generate realistic pedestrian-PWC interaction trajectories."
+  }
+]
