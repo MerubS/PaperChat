@@ -1,6 +1,6 @@
 # 📄 PaperChat
 
-> Chat with your research papers using AI. Upload any PDF and ask questions in natural language — powered by RAG, LangChain, OpenAI GPT-4, and Pinecone.
+> Chat with your research papers using AI. Upload any PDF and ask questions in natural language — powered by RAG, LangChain, OpenAI GPT-5.6, and Pinecone.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20Site-black?style=for-the-badge&logo=vercel)](https://paperchat-bixg7nbyg-merub-shaikhs-projects.vercel.app/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
@@ -24,7 +24,7 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 - **🧠 Semantic Search** — Finds relevant sections by meaning, not just keywords
 - **💬 Conversational Q&A** — Ask questions in natural language
 - **⚡ Fast Retrieval** — Sub-second responses using Pinecone vector database
-- **🎯 Context-Aware** — GPT-4 answers grounded in your specific document
+- **🎯 Context-Aware** — GPT-5.6 answers grounded in your specific document
 - **🔗 Clickable Citations** — Every answer cites its sources as `[1]` markers and page chips; click one to open the PDF at that page with the exact passage highlighted
 - **🌙 Dark Mode UI** — Modern ChatGPT-like interface
 - **📱 Responsive Design** — Works on desktop and mobile
@@ -66,7 +66,7 @@ PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
      ↓
 🔍 Semantic Search       (Pinecone similarity search - top 6 chunks)
      ↓
-🤖 Answer Generation     (GPT-4 + numbered context, cites passages as [n])
+🤖 Answer Generation     (GPT-5.6 + numbered context, cites passages as [n])
      ↓
 🔗 Citations             ([n] markers mapped back to page + quoted passage)
      ↓
@@ -140,7 +140,7 @@ The eval dataset (`evals/dataset.json`) contains 20 ground-truth question-answer
 | **Framework** | Next.js 15 (App Router) |
 | **Language** | TypeScript |
 | **AI Framework** | LangChain.js 0.3.x |
-| **LLM** | OpenAI GPT-4 |
+| **LLM** | OpenAI GPT-5.6 Sol (configurable via `OPENAI_CHAT_MODEL`) |
 | **Embeddings** | OpenAI text-embedding-ada-002 (1536 dims) |
 | **Vector Database** | Pinecone |
 | **Styling** | Custom CSS (Dark Mode) |
@@ -304,17 +304,18 @@ const splitter = new RecursiveCharacterTextSplitter({
   chunkOverlap: 200,  // Overlap to prevent cutting ideas mid-sentence
 });
 
-// Retrieval settings
-const retriever = vectorStore.asRetriever({
-  k: 3,              // Number of relevant chunks to retrieve
-});
-
-// LLM settings
-const model = new ChatOpenAI({
-  modelName: "gpt-4",      // Switch to "gpt-3.5-turbo" to reduce cost
-  temperature: 0,           // 0 = deterministic answers
-});
+// Retrieval settings (src/lib/rag.ts)
+const docs = await vectorStore.similaritySearch(query, 6); // number of chunks to retrieve
 ```
+
+```env
+# Model settings (.env), all optional
+OPENAI_CHAT_MODEL=gpt-5.6-sol        # default; gpt-5.6-terra is cheaper and faster
+OPENAI_REASONING_EFFORT=none         # none | low | medium | high
+EVAL_JUDGE_MODEL=gpt-5.6-terra       # RAGAS judge model in evals/run_evals.py
+```
+
+> `gpt-4` and `gpt-3.5-turbo` were shut down by OpenAI on Oct 23, 2026. The iteration history above was measured with GPT-4 as the answer model; re-run `python evals/run_evals.py` for current scores.
 
 ---
 
@@ -387,7 +388,7 @@ Contributions are welcome!
 ## 🙏 Acknowledgments
 
 - [LangChain](https://langchain.com) — AI orchestration framework
-- [OpenAI](https://openai.com) — GPT-4 and embeddings API
+- [OpenAI](https://openai.com) — GPT-5.6 and embeddings API
 - [Pinecone](https://pinecone.io) — Vector database
 - [Next.js](https://nextjs.org) — React framework
 - [Vercel](https://vercel.com) — Deployment platform

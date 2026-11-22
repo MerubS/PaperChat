@@ -3,12 +3,9 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { PineconeStore } from '@langchain/pinecone';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 import { buildNumberedContext, extractCitations } from './citations';
 import * as dotenv from 'dotenv';
-import OpenAI from 'openai';
-import { ChatOpenAI } from '@langchain/openai';
+import { generateAnswer } from './llm';
 
 
 dotenv.config();
@@ -83,14 +80,12 @@ export async function queryDocument(query: string, documentId: string) {
             namespace: documentId,
         });
 
-        const model = new ChatOpenAI({
-            openAIApiKey: process.env.OPENAI_API_KEY,
-            temperature: 0,
-            modelName: 'gpt-4',
-        });
+        // Retrieve the top 6 chunks and number them, so the model's [n] markers
+        // can be mapped back to pages.
+        const docs = await vectorStore.similaritySearch(query, 6);
+        const context = buildNumberedContext(docs);
 
-        const prompt = ChatPromptTemplate.fromMessages([
-            ["system", `You are a precise research paper assistant.
+        const system = `You are a precise research paper assistant.
 
 CRITICAL RULES - follow these exactly:
 1. Answer the question DIRECTLY in your first sentence
@@ -111,15 +106,9 @@ ANSWER FORMAT RULES:
 - Never start with background context
 - Never start with "The paper discusses..." or "This study..."
 
-Context from the research paper: {context}`],
-            ["human", "{input}"]  
-        ]);
-        // Retrieve the top 6 chunks ourselves (same as the old retriever, k: 6)
-        // so we can number them and map the model's [n] markers back to pages.
-        const docs = await vectorStore.similaritySearch(query, 6);
+Context from the research paper: ${context}`;
 
-        const chain = prompt.pipe(model).pipe(new StringOutputParser());
-        const rawAnswer = await chain.invoke({ context: buildNumberedContext(docs), input: query });
+        const rawAnswer = await generateAnswer(system, query);
         const { answer, citations } = extractCitations(rawAnswer, docs);
         console.log(`Query response generated with ${citations.length} citation(s).`);
 

@@ -317,7 +317,7 @@ export default function Home() {
 
             {/* Features */}
             <div className="features">
-              {['Semantic Search', 'GPT-4 Powered', 'Instant Answers'].map(f => (
+              {['Semantic Search', 'GPT-5.6 Powered', 'Instant Answers'].map(f => (
                 <span key={f} className="feature-tag">✦ {f}</span>
               ))}
             </div>
