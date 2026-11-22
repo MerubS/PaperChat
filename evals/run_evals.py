@@ -58,17 +58,25 @@ embeddings = OpenAIEmbeddings(
     model="text-embedding-ada-002"
 )
 
+# gpt-4 and gpt-3.5-turbo were shut down on 2026-10-23. These are OpenAI's listed
+# replacements; override with OPENAI_CHAT_MODEL / EVAL_JUDGE_MODEL.
+# No temperature: GPT-5.x models may reject sampling params. reasoning_effort="none"
+# keeps them fast and close to a plain chat model.
+ANSWER_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-5.6-sol")
+JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "gpt-5.6-terra")
+
 answer_llm = ChatOpenAI(
-    model="gpt-4",
+    model=ANSWER_MODEL,
     openai_api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=0
+    reasoning_effort="none",
 )
 
 eval_llm = ChatOpenAI(
-    model="gpt-3.5-turbo",
+    model=JUDGE_MODEL,
     openai_api_key=os.getenv("OPENAI_API_KEY"),
-    temperature=0
+    reasoning_effort="none",
 )
+print(f"🤖 Answer model: {ANSWER_MODEL} · Judge model: {JUDGE_MODEL}\n")
 
 
 # --- Load dataset ---

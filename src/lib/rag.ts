@@ -3,12 +3,8 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { PineconeStore } from '@langchain/pinecone';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
-import { createRetrievalChain } from 'langchain/chains/retrieval';
 import * as dotenv from 'dotenv';
-import OpenAI from 'openai';
-import { ChatOpenAI } from '@langchain/openai';
+import { generateAnswer } from './llm';
 
 
 dotenv.config();
@@ -83,14 +79,11 @@ export async function queryDocument(query: string, documentId: string) {
             namespace: documentId,
         });
 
-        const model = new ChatOpenAI({
-            openAIApiKey: process.env.OPENAI_API_KEY,
-            temperature: 0,
-            modelName: 'gpt-4',
-        });
+        // Same top-6 retrieval as before
+        const docs = await vectorStore.similaritySearch(query, 6);
+        const context = docs.map((d) => d.pageContent).join('\n\n');
 
-        const prompt = ChatPromptTemplate.fromMessages([
-            ["system", `You are a precise research paper assistant.
+        const system = `You are a precise research paper assistant.
 
 CRITICAL RULES - follow these exactly:
 1. Answer the question DIRECTLY in your first sentence
@@ -110,17 +103,11 @@ ANSWER FORMAT RULES:
 - Never start with background context
 - Never start with "The paper discusses..." or "This study..."
 
-Context from the research paper: {context}`],
-            ["human", "{input}"]  
-        ]);
-        const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
-        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever({ k: 6 }), combineDocsChain });
-      
+Context from the research paper: ${context}`;
 
-        const response = await chain.invoke({ input: query });
+        const answer = await generateAnswer(system, query);
         console.log('Query response generated successfully.');
-        // console.log('Full response:', JSON.stringify(response, null, 2));
-        return { success: true, response: response.answer , query: query };
+        return { success: true, response: answer, query: query };
     } catch (error) {
         console.error('Error querying document:', error);
         throw error;
