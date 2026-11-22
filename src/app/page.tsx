@@ -1,6 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import dynamic from 'next/dynamic';
+import type { Citation } from '@/lib/citations';
+
+// pdf.js only runs in the browser
+const PdfViewer = dynamic(() => import('./PdfViewer'), { ssr: false });
 
 // --- Icons ---
 const UploadIcon = () => (
@@ -45,6 +50,32 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  citations?: Citation[];
+}
+
+// Renders the answer text with [n] markers turned into clickable citation buttons.
+function AnswerText({ text, citations, onCite }: {
+  text: string;
+  citations?: Citation[];
+  onCite: (c: Citation) => void;
+}) {
+  if (!citations?.length) return <p className="message-text">{text}</p>;
+  const byId = new Map(citations.map(c => [c.id, c]));
+  const parts = text.split(/(\[\d+\])/g);
+  return (
+    <p className="message-text">
+      {parts.map((part, i) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        const c = m ? byId.get(Number(m[1])) : undefined;
+        return c ? (
+          <button key={i} className="cite-marker" onClick={() => onCite(c)}
+            title={`Page ${c.page}`} aria-label={`Citation ${c.id}, page ${c.page}`}>
+            {c.id}
+          </button>
+        ) : <Fragment key={i}>{part}</Fragment>;
+      })}
+    </p>
+  );
 }
 
 const SUGGESTIONS = [
@@ -65,6 +96,7 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(false);
   const [dragOver, setDragOver] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -165,6 +197,7 @@ export default function Home() {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.response || 'I could not find an answer to that question.',
+          citations: data.citations || [],
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
       } else {
@@ -186,6 +219,7 @@ export default function Home() {
     setMessages([]);
     setInput('');
     setError('');
+    setActiveCitation(null);
   };
 
   return (
@@ -316,7 +350,21 @@ export default function Home() {
                       </span>
                       <span className="message-time">{msg.timestamp}</span>
                     </div>
-                    <p className="message-text">{msg.content}</p>
+                    <AnswerText text={msg.content} citations={msg.citations} onCite={setActiveCitation} />
+                    {msg.citations && msg.citations.length > 0 && (
+                      <div className="cite-chips" aria-label="Sources">
+                        {msg.citations.map(c => (
+                          <button
+                            key={c.id}
+                            className={`cite-chip ${activeCitation === c ? 'active' : ''}`}
+                            onClick={() => setActiveCitation(c)}
+                            title={c.quote.slice(0, 200)}
+                          >
+                            <span className="cite-num">{c.id}</span> p. {c.page}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -386,6 +434,10 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {uploaded && file && activeCitation && (
+        <PdfViewer file={file} citation={activeCitation} onClose={() => setActiveCitation(null)} />
+      )}
     </div>
   );
 }

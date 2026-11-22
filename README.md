@@ -25,6 +25,7 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 - **💬 Conversational Q&A** — Ask questions in natural language
 - **⚡ Fast Retrieval** — Sub-second responses using Pinecone vector database
 - **🎯 Context-Aware** — GPT-4 answers grounded in your specific document
+- **🔗 Clickable Citations** — Every answer cites its sources as `[1]` markers and page chips; click one to open the PDF at that page with the exact passage highlighted
 - **🌙 Dark Mode UI** — Modern ChatGPT-like interface
 - **📱 Responsive Design** — Works on desktop and mobile
 - **🔒 Secure** — Files processed in memory, not stored permanently
@@ -38,6 +39,9 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 
 ### Chat Interface
 ![Chat Interface](./public/paperchat_chat.png)
+
+### Clickable Citations
+![Clickable citations with highlighted source passage](./public/paperchat_citations.png)
 
 
 
@@ -62,9 +66,11 @@ PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
      ↓
 🔍 Semantic Search       (Pinecone similarity search - top 6 chunks)
      ↓
-🤖 Answer Generation     (GPT-4 + retrieved context)
+🤖 Answer Generation     (GPT-4 + numbered context, cites passages as [n])
      ↓
-💡 Answer returned to user
+🔗 Citations             ([n] markers mapped back to page + quoted passage)
+     ↓
+💡 Answer + citations returned; click a citation to highlight it in the PDF
 ```
 
 ---
@@ -266,16 +272,24 @@ Queries the document and returns an AI-generated answer.
 ```json
 {
   "success": true,
-  "answer": "This paper examines...",
-  "question": "What is this paper about?",
-  "sources": [
-    {
-      "preview": "Relevant excerpt from the paper...",
-      "page": 3
-    }
+  "response": "The study recruited AAC users and their partners [1]. Participants used gaze and facial expression [2].",
+  "query": "What is this paper about?",
+  "citations": [
+    { "id": 1, "page": 4, "quote": "The study (1) foregrounds AAC users' lived expertise..." },
+    { "id": 2, "page": 6, "quote": "Participants described..." }
   ]
 }
 ```
+
+---
+
+### Tests
+
+```bash
+npm run test:citations
+```
+
+Checks citation parsing, and that every chunk the upload route creates is found and highlighted on its page in the viewer, using both eval papers.
 
 ---
 

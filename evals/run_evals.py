@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from dotenv import load_dotenv
@@ -134,8 +135,11 @@ for paper_name, questions in papers.items():
                 print(f"  ⚠️  No relevant chunks found!")
                 continue
 
-            # Generate answer
-            context_text = "\n\n---\n\n".join(contexts)
+            # Generate answer (numbered like the app, see buildNumberedContext in src/lib/citations.ts)
+            context_text = "\n\n---\n\n".join(
+                f"[{n}] (page {doc.metadata.get('pageNumber', '?')})\n{doc.page_content}"
+                for n, doc in enumerate(retrieved_docs, start=1)
+            )
             messages = [
                 {
                     "role": "system",
@@ -148,6 +152,8 @@ CRITICAL RULES:
 4. Do NOT make assumptions or inferences
 5. If the answer is not in the context, say: "I could not find that specific information in the provided context."
 6. Keep answers concise and focused on what was asked
+7. Do not provide background information unless specifically asked
+8. Each passage in the context is numbered like [1] (page 3). After every sentence that uses the context, cite the passage(s) it came from, e.g. [1] or [2][4]. Only cite numbers that appear in the context. Do not cite anything in the "could not find" reply.
 
 ANSWER FORMAT RULES:
 - "What X was used?" → Begin: "The study used [X]..."
@@ -168,7 +174,8 @@ Context from the research paper:
             ]
 
             response = answer_llm.invoke(messages)
-            answer = response.content
+            # Strip [n] citation markers so RAGAS scores the answer text itself
+            answer = re.sub(r"\s*\[\d+(?:\s*,\s*\d+)*\]", "", response.content).strip()
 
             print(f"  ✅ Answer generated ({len(answer)} chars)")
             print(f"  📚 Retrieved {len(contexts)} chunks")

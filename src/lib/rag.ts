@@ -4,8 +4,8 @@ import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { PineconeStore } from '@langchain/pinecone';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
-import { createRetrievalChain } from 'langchain/chains/retrieval';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { buildNumberedContext, extractCitations } from './citations';
 import * as dotenv from 'dotenv';
 import OpenAI from 'openai';
 import { ChatOpenAI } from '@langchain/openai';
@@ -100,6 +100,7 @@ CRITICAL RULES - follow these exactly:
 5. If the exact answer is not in the context, say exactly: "I could not find that specific information in the provided context."
 6. Keep answers concise and focused on what was asked
 7. Do not provide background information unless specifically asked
+8. Each passage in the context is numbered like [1] (page 3). After every sentence that uses the context, cite the passage(s) it came from, e.g. [1] or [2][4]. Only cite numbers that appear in the context. Do not cite anything in the "could not find" reply.
 
 ANSWER FORMAT RULES:
 - "What X was used?" → Begin: "The study used [X]..."
@@ -113,14 +114,16 @@ ANSWER FORMAT RULES:
 Context from the research paper: {context}`],
             ["human", "{input}"]  
         ]);
-        const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
-        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever({ k: 6 }), combineDocsChain });
-      
+        // Retrieve the top 6 chunks ourselves (same as the old retriever, k: 6)
+        // so we can number them and map the model's [n] markers back to pages.
+        const docs = await vectorStore.similaritySearch(query, 6);
 
-        const response = await chain.invoke({ input: query });
-        console.log('Query response generated successfully.');
-        // console.log('Full response:', JSON.stringify(response, null, 2));
-        return { success: true, response: response.answer , query: query };
+        const chain = prompt.pipe(model).pipe(new StringOutputParser());
+        const rawAnswer = await chain.invoke({ context: buildNumberedContext(docs), input: query });
+        const { answer, citations } = extractCitations(rawAnswer, docs);
+        console.log(`Query response generated with ${citations.length} citation(s).`);
+
+        return { success: true, response: answer, citations, query: query };
     } catch (error) {
         console.error('Error querying document:', error);
         throw error;
