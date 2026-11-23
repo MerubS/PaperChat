@@ -1,26 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryDocument } from '@/lib/rag';
+import { handle } from '@/lib/api';
+import {
+  HttpError, checkAccessCode, clientIp, questionLimiter, requireDocumentId, requireQuestion,
+} from '@/lib/security';
 
 export async function POST(req: NextRequest) {
-    try {
-        const { question, documentId } = await req.json();
+  return handle('Query', async () => {
+    checkAccessCode(req.headers.get('x-access-code'));
+    questionLimiter.check(clientIp(req.headers));
 
-        if (!question || !documentId) {
-            return NextResponse.json(
-                { success: false, error: 'Missing question or documentId' },
-                { status: 400 }
-            );
-        }
+    const body = await req.json().catch(() => {
+      throw new HttpError(400, 'Invalid JSON body.');
+    });
+    const question = requireQuestion(body?.question);
+    const documentId = requireDocumentId(body?.documentId);
 
-        const result = await queryDocument(question, documentId);
-
-        return NextResponse.json(result);
-
-    } catch (error: any) {
-        console.error('Query error:', error);
-        return NextResponse.json(
-            { success: false, error: error.message || 'Query failed' },
-            { status: 500 }
-        );
-    }
+    return NextResponse.json(await queryDocument(question, documentId));
+  });
 }

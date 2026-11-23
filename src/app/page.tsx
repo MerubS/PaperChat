@@ -1,6 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
+import dynamic from 'next/dynamic';
+import type { Citation } from '@/lib/citations';
+
+// pdf.js only runs in the browser
+const PdfViewer = dynamic(() => import('./PdfViewer'), { ssr: false });
 
 // --- Icons ---
 const UploadIcon = () => (
@@ -45,6 +50,54 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  citations?: Citation[];
+}
+
+// Renders the answer text with [n] markers turned into clickable citation buttons.
+function AnswerText({ text, citations, onCite }: {
+  text: string;
+  citations?: Citation[];
+  onCite: (c: Citation) => void;
+}) {
+  if (!citations?.length) return <p className="message-text">{text}</p>;
+  const byId = new Map(citations.map(c => [c.id, c]));
+  const parts = text.split(/(\[\d+\])/g);
+  return (
+    <p className="message-text">
+      {parts.map((part, i) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        const c = m ? byId.get(Number(m[1])) : undefined;
+        return c ? (
+          <button key={i} className="cite-marker" onClick={() => onCite(c)}
+            title={`Page ${c.page}`} aria-label={`Citation ${c.id}, page ${c.page}`}>
+            {c.id}
+          </button>
+        ) : <Fragment key={i}>{part}</Fragment>;
+      })}
+    </p>
+  );
+}
+
+const MAX_UPLOAD_MB = 10; // keep in sync with MAX_UPLOAD_MB on the server
+
+// Checks a chosen file before upload (the server re-checks everything).
+function precheckFile(f: File | undefined): string | null {
+  if (!f) return 'Please choose a PDF file';
+  if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return 'Please upload a PDF file';
+  if (f.size > MAX_UPLOAD_MB * 1024 * 1024) return `PDFs must be ${MAX_UPLOAD_MB} MB or smaller`;
+  return null;
+}
+
+// Tells the server to delete a paper's stored embeddings. keepalive/sendBeacon let it finish during tab close.
+function deleteDocumentOnServer(documentId: string, accessCode: string, onUnload = false) {
+  if (!documentId) return;
+  const body = JSON.stringify({ documentId, accessCode: accessCode || undefined });
+  if (onUnload && navigator.sendBeacon) {
+    navigator.sendBeacon('/api/document', new Blob([body], { type: 'application/json' }));
+    return;
+  }
+  fetch('/api/document', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+    .catch(() => { /* the server also sweeps stale papers */ });
 }
 
 const SUGGESTIONS = [
@@ -65,10 +118,42 @@ export default function Home() {
   const [loading, setLoading] = useState<boolean>(false);
   const [dragOver, setDragOver] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
+  const [accessCode, setAccessCode] = useState<string>('');
+  const [needsCode, setNeedsCode] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Remember the access code for this browser tab only
+  useEffect(() => {
+    try { setAccessCode(sessionStorage.getItem('paperchat-access-code') || ''); } catch {}
+  }, []);
+  const saveAccessCode = (code: string) => {
+    setAccessCode(code);
+    try { sessionStorage.setItem('paperchat-access-code', code); } catch {}
+  };
+
+  // Delete this paper's data from Pinecone when the tab closes
+  useEffect(() => {
+    if (!documentId) return;
+    const onHide = () => deleteDocumentOnServer(documentId, accessCode, true);
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, [documentId, accessCode]);
+
+  const authHeaders = (): Record<string, string> => (accessCode ? { 'x-access-code': accessCode } : {});
+
+  // Shows the access-code field when the server asks for one
+  const handleApiError = (res: Response, data: any, fallback: string) => {
+    if (res.status === 401) {
+      setNeedsCode(true);
+      setError(accessCode ? 'That access code is incorrect.' : 'This demo needs an access code.');
+    } else {
+      setError(data?.error || fallback);
+    }
+  };
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -78,11 +163,12 @@ export default function Home() {
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError('');
+    const problem = precheckFile(f);
+    if (problem) {
+      setError(problem);
     } else {
-      setError('Please upload a PDF file');
+      setFile(f!);
+      setError('');
     }
   };
 
@@ -91,11 +177,12 @@ export default function Home() {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files?.[0];
-    if (f && f.type === 'application/pdf') {
-      setFile(f);
-      setError('');
+    const problem = precheckFile(f);
+    if (problem) {
+      setError(problem);
     } else {
-      setError('Please drop a PDF file');
+      setFile(f!);
+      setError('');
     }
   };
 
@@ -111,12 +198,14 @@ export default function Home() {
 
       const res = await fetch('/api/upload', {
         method: 'POST',
+        headers: authHeaders(),
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (data.success) {
+      if (res.ok && data.success) {
+        setNeedsCode(false);
         setDocumentId(data.documentId);
         setUploaded(true);
         setMessages([{
@@ -125,7 +214,7 @@ export default function Home() {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
       } else {
-        setError(data.error || 'Upload failed. Please try again.');
+        handleApiError(res, data, 'Upload failed. Please try again.');
       }
     } catch (err) {
       setError('Upload failed. Please check your connection and try again.');
@@ -154,21 +243,21 @@ export default function Home() {
     try {
       const res = await fetch('/api/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ question, documentId }),
       });
 
-      const data = await res.json();
-      console.log(data);
+      const data = await res.json().catch(() => ({}));
 
-      if (data.success) {
+      if (res.ok && data.success) {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.response || 'I could not find an answer to that question.',
+          citations: data.citations || [],
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
       } else {
-        setError(data.error || 'Query failed. Please try again.');
+        handleApiError(res, data, 'Query failed. Please try again.');
       }
     } catch (err) {
       setError('Failed to get answer. Please try again.');
@@ -180,12 +269,15 @@ export default function Home() {
 
   // Reset everything
   const handleReset = () => {
+    // Free this paper's embeddings in Pinecone
+    deleteDocumentOnServer(documentId, accessCode);
     setFile(null);
     setDocumentId('');
     setUploaded(false);
     setMessages([]);
     setInput('');
     setError('');
+    setActiveCitation(null);
   };
 
   return (
@@ -268,6 +360,19 @@ export default function Home() {
             {/* Error */}
             {error && <p className="error-msg">{error}</p>}
 
+            {/* Access code (only when the server requires one) */}
+            {needsCode && (
+              <input
+                className="access-code-input"
+                type="password"
+                placeholder="Access code"
+                aria-label="Access code"
+                value={accessCode}
+                onChange={e => saveAccessCode(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleUpload(); }}
+              />
+            )}
+
             {/* Upload Button */}
             <button
               className={`upload-btn ${file && !uploading ? 'active' : 'disabled'}`}
@@ -283,7 +388,7 @@ export default function Home() {
 
             {/* Features */}
             <div className="features">
-              {['Semantic Search', 'GPT-4 Powered', 'Instant Answers'].map(f => (
+              {['Semantic Search', 'GPT-5.6 Powered', 'Instant Answers'].map(f => (
                 <span key={f} className="feature-tag">✦ {f}</span>
               ))}
             </div>
@@ -316,7 +421,21 @@ export default function Home() {
                       </span>
                       <span className="message-time">{msg.timestamp}</span>
                     </div>
-                    <p className="message-text">{msg.content}</p>
+                    <AnswerText text={msg.content} citations={msg.citations} onCite={setActiveCitation} />
+                    {msg.citations && msg.citations.length > 0 && (
+                      <div className="cite-chips" aria-label="Sources">
+                        {msg.citations.map(c => (
+                          <button
+                            key={c.id}
+                            className={`cite-chip ${activeCitation === c ? 'active' : ''}`}
+                            onClick={() => setActiveCitation(c)}
+                            title={c.quote.slice(0, 200)}
+                          >
+                            <span className="cite-num">{c.id}</span> p. {c.page}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -386,6 +505,10 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {uploaded && file && activeCitation && (
+        <PdfViewer file={file} citation={activeCitation} onClose={() => setActiveCitation(null)} />
+      )}
     </div>
   );
 }

@@ -3,12 +3,10 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { PineconeStore } from '@langchain/pinecone';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
-import { createRetrievalChain } from 'langchain/chains/retrieval';
+import { buildNumberedContext, extractCitations } from './citations';
 import * as dotenv from 'dotenv';
-import OpenAI from 'openai';
-import { ChatOpenAI } from '@langchain/openai';
+import { generateAnswer } from './llm';
+import { checkPageCount, staleNamespaces } from './security';
 
 
 dotenv.config();
@@ -34,19 +32,25 @@ function getEmbeddings(): OpenAIEmbeddings {
   return embeddings;
 }
 
-export async function uploadPDF(pdfUrl: string , documentId: string ) {
+/**
+ * Parses a PDF, chunks it and stores the embeddings in its own Pinecone namespace.
+ * `source` is a file path (eval scripts) or an in-memory Blob (API uploads), so
+ * uploads never touch the disk.
+ */
+export async function uploadPDF(source: string | Blob, documentId: string) {
   try{
-    console.log('Loading PDF from URL:', pdfUrl);
-    const loader = new PDFLoader(pdfUrl);
+    const loader = new PDFLoader(source);
     const documents = await loader.load();
     console.log('PDF loaded successfully. Number of pages:', documents.length);
+    // Enforce the page limit before paying for embeddings
+    if (typeof source !== 'string') checkPageCount(documents.length);
     
     documents.forEach((doc:any, index:number) => {
       doc.metadata = {
         ...doc.metadata,
         documentId: `${documentId}_page_${index + 1}`,
         pageNumber: index + 1,
-        source: pdfUrl
+        source: typeof source === 'string' ? source : 'upload'
       };
     });
 
@@ -83,14 +87,12 @@ export async function queryDocument(query: string, documentId: string) {
             namespace: documentId,
         });
 
-        const model = new ChatOpenAI({
-            openAIApiKey: process.env.OPENAI_API_KEY,
-            temperature: 0,
-            modelName: 'gpt-4',
-        });
+        // Retrieve the top 6 chunks and number them, so the model's [n] markers
+        // can be mapped back to pages.
+        const docs = await vectorStore.similaritySearch(query, 6);
+        const context = buildNumberedContext(docs);
 
-        const prompt = ChatPromptTemplate.fromMessages([
-            ["system", `You are a precise research paper assistant.
+        const system = `You are a precise research paper assistant.
 
 CRITICAL RULES - follow these exactly:
 1. Answer the question DIRECTLY in your first sentence
@@ -100,6 +102,7 @@ CRITICAL RULES - follow these exactly:
 5. If the exact answer is not in the context, say exactly: "I could not find that specific information in the provided context."
 6. Keep answers concise and focused on what was asked
 7. Do not provide background information unless specifically asked
+8. Each passage in the context is numbered like [1] (page 3). After every sentence that uses the context, cite the passage(s) it came from, e.g. [1] or [2][4]. Only cite numbers that appear in the context. Do not cite anything in the "could not find" reply.
 
 ANSWER FORMAT RULES:
 - "What X was used?" → Begin: "The study used [X]..."
@@ -110,17 +113,13 @@ ANSWER FORMAT RULES:
 - Never start with background context
 - Never start with "The paper discusses..." or "This study..."
 
-Context from the research paper: {context}`],
-            ["human", "{input}"]  
-        ]);
-        const combineDocsChain = await createStuffDocumentsChain({ llm: model, prompt });
-        const chain = await createRetrievalChain({ retriever: vectorStore.asRetriever({ k: 6 }), combineDocsChain });
-      
+Context from the research paper: ${context}`;
 
-        const response = await chain.invoke({ input: query });
-        console.log('Query response generated successfully.');
-        // console.log('Full response:', JSON.stringify(response, null, 2));
-        return { success: true, response: response.answer , query: query };
+        const rawAnswer = await generateAnswer(system, query);
+        const { answer, citations } = extractCitations(rawAnswer, docs);
+        console.log(`Query response generated with ${citations.length} citation(s).`);
+
+        return { success: true, response: answer, citations, query: query };
     } catch (error) {
         console.error('Error querying document:', error);
         throw error;
@@ -140,3 +139,27 @@ export async function deleteDocument(documentId: string) {
         throw error;
     }
 }
+
+let lastSweep = 0;
+
+/**
+ * Deletes uploaded papers older than DOCUMENT_TTL_HOURS from Pinecone, catching
+ * any whose "New Chat" / tab-close cleanup never ran. Only touches namespaces
+ * created by the upload API ("u-<timestamp>-<uuid>"), never the eval data.
+ * Runs at most every 10 minutes per server instance.
+ */
+export async function sweepStaleDocuments(now = Date.now()) {
+  if (now - lastSweep < 10 * 60 * 1000) return { deleted: 0, skipped: true };
+  lastSweep = now;
+
+  const pineconeIndex = getPineconeClient().index(process.env.PINECONE_INDEX_NAME!);
+  const stats = await pineconeIndex.describeIndexStats();
+  const stale = staleNamespaces(Object.keys(stats.namespaces ?? {}), now);
+
+  for (const ns of stale) {
+    await pineconeIndex.namespace(ns).deleteAll();
+  }
+  if (stale.length) console.log(`Swept ${stale.length} stale document namespace(s).`);
+  return { deleted: stale.length, skipped: false };
+}
+
