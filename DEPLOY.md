@@ -12,7 +12,7 @@ Browser ──► S3 uploads bucket (presigned POST; PDF deleted right after ing
 EventBridge (daily) ──► Eval Lambda (RAGAS, Claude judge) ──► CloudWatch ──► alarms ──► email
 ```
 
-Everything goes into **us-east-1** unless you set `CDK_DEFAULT_REGION`.
+**Region:** deploying from GitHub (Option A) uses **us-east-2 (Ohio)** by default, the only region a Free-plan AWS account can use. To use another region, set the repository variable `AWS_REGION` (e.g. `us-east-1`) and create the secrets there. Option B uses your AWS CLI's default region. The examples below say `us-east-1`; use your region instead.
 
 ---
 
@@ -20,7 +20,7 @@ Everything goes into **us-east-1** unless you set `CDK_DEFAULT_REGION`.
 
 Everything happens in two browser tabs: the **AWS console** and your **GitHub repo**. GitHub Actions builds the Docker images on a free ARM runner and deploys with short-lived credentials (OpenID Connect), so no AWS access keys are created or stored.
 
-**In the AWS console** (top-right region picker: **US East (N. Virginia) us-east-1**):
+**In the AWS console**, in your deploy region (**US East (Ohio) us-east-2** by default; the region shows in the address bar):
 
 1. **Secure the account:** if you're signed in as the root user, turn on MFA (account menu → Security credentials).
 2. **Turn on the Bedrock models:** see step 2 below.

@@ -5,6 +5,8 @@
 # Repository settings -> Secrets and variables -> Actions:
 #   secret   AWS_DEPLOY_ROLE_ARN   (output of the github-oidc-role stack)
 #   variable ALERT_EMAIL           (optional: where CloudWatch alarms are sent)
+#   variable AWS_REGION            (optional: region to deploy to; default us-east-2, the only
+#                                   region a Free-plan account can use)
 name: Deploy to AWS
 
 on:
@@ -46,8 +48,8 @@ jobs:
       id-token: write   # lets GitHub sign in to AWS with OIDC
       contents: read
     env:
-      AWS_REGION: us-east-1
-      CDK_DEFAULT_REGION: us-east-1
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+      CDK_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,7 +64,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Check the Pinecone secret exists
         run: |
@@ -72,12 +74,12 @@ jobs:
           fi
           # Stop only if the secret is definitely missing; if the deploy role can't check, warn and continue.
           if out=$(aws secretsmanager describe-secret --secret-id paperchat/pinecone-api-key 2>&1); then
-            echo "Found paperchat/pinecone-api-key in us-east-1."
+            echo "Found paperchat/pinecone-api-key in $AWS_REGION."
           elif echo "$out" | grep -q ResourceNotFoundException; then
-            echo "::error::Secret paperchat/pinecone-api-key not found in us-east-1. Create it there (DEPLOY.md, Option A step 3)."
+            echo "::error::Secret paperchat/pinecone-api-key not found in $AWS_REGION. Create it there (DEPLOY.md, Option A step 3)."
             exit 1
           else
-            echo "::warning::Couldn't verify the Pinecone secret, continuing. Make sure paperchat/pinecone-api-key exists in us-east-1. Details: $out"
+            echo "::warning::Couldn't verify the Pinecone secret, continuing. Make sure paperchat/pinecone-api-key exists in $AWS_REGION. Details: $out"
           fi
 
       - name: Deploy with CDK
