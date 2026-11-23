@@ -1,42 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { uploadPDF } from '@/lib/rag';
-import { tmpdir } from 'os';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { uploadPDF, sweepStaleDocuments } from '@/lib/rag';
+import { handle } from '@/lib/api';
+import {
+  checkAccessCode, checkContentLength, clientIp, newDocumentId, uploadLimiter, validatePdf,
+} from '@/lib/security';
 
 export async function POST(req: NextRequest) {
-    try {
-        const formData = await req.formData();
-        const file = formData.get('file') as File;
+  return handle('Upload', async () => {
+    checkAccessCode(req.headers.get('x-access-code'));
+    checkContentLength(req.headers);
+    uploadLimiter.check(clientIp(req.headers));
 
-        if (!file) {
-            return NextResponse.json(
-                { success: false, error: 'No file provided' },
-                { status: 400 }
-            );
-        }
+    const formData = await req.formData();
+    const bytes = await validatePdf(formData.get('file'));
 
-        // Save file to uploads folder
+    // Parsed straight from memory: nothing is written to disk.
+    const documentId = newDocumentId();
+    const result = await uploadPDF(new Blob([bytes], { type: 'application/pdf' }), documentId);
 
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        const documentId = uuidv4();
-        const filePath = path.join( tmpdir(), `${documentId}.pdf`);
-        await writeFile(filePath, buffer);
+    // Clean up papers whose chats were abandoned (doesn't block the response on failure)
+    sweepStaleDocuments().catch((e) => console.error('Sweep failed:', e));
 
-        console.log(`✅ File saved: ${filePath}`);
-
-        // Process with RAG
-        const result = await uploadPDF(filePath, documentId);
-
-        return NextResponse.json(result);
-
-    } catch (error: any) {
-        console.error('Upload error:', error);
-        return NextResponse.json(
-            { success: false, error: error.message || 'Upload failed' },
-            { status: 500 }
-        );
-    }
+    return NextResponse.json(result);
+  });
 }

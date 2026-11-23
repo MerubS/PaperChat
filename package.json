@@ -9,7 +9,9 @@
     "build": "next build",
     "start": "next start",
     "test": "ts-node src/test.ts",
-    "test:citations": "tsx --test tests/citations.test.ts"
+    "test:citations": "tsx --test tests/citations.test.ts",
+    "test:security": "tsx --test tests/security.test.ts",
+    "test:unit": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@langchain/community": "0.3.18",

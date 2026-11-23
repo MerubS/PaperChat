@@ -283,10 +283,37 @@ Queries the document and returns an AI-generated answer.
 
 ---
 
+## 🔒 Security & Limits
+
+The API is public by default, so it's protected with:
+
+- **Optional access code**: set `ACCESS_CODE` and every API call must send it. The app asks for it once per browser tab. Comparison is constant-time.
+- **Per-IP rate limits**: uploads and questions are rate-limited and return `429` with `Retry-After`. Limits are in memory per server instance; on multi-instance serverless, swap in a shared store (e.g. Redis/DynamoDB).
+- **Server-side file checks**: real PDF bytes (`%PDF-` header, not just the filename or MIME type), size limit, page limit (checked before paying for embeddings), and oversized bodies rejected from `Content-Length` before they're read.
+- **No temp files**: uploads are parsed straight from memory.
+- **Pinecone cleanup**: a paper's vectors are deleted on **New Chat** and when the tab closes (`sendBeacon`). Papers whose cleanup never ran are swept after `DOCUMENT_TTL_HOURS`. The API only accepts and deletes its own `u-<timestamp>-<uuid>` namespaces, so eval data (`aac`, `proxemics`) can't be queried or deleted through it.
+- **Input validation and generic errors**: question length limit, document ID format check, and internal errors logged on the server rather than sent to the browser.
+
+| Env var | Default | |
+|---|---|---|
+| `ACCESS_CODE` | *(unset = open)* | Shared code required for all API calls |
+| `MAX_UPLOAD_MB` | `10` | Max PDF size (also update `MAX_UPLOAD_MB` in `page.tsx`) |
+| `MAX_PDF_PAGES` | `60` | Max pages per PDF |
+| `MAX_QUESTION_CHARS` | `1000` | Max question length |
+| `UPLOADS_PER_HOUR` | `5` | Uploads per IP per hour |
+| `QUESTIONS_PER_10_MIN` | `30` | Questions per IP per 10 minutes |
+| `DOCUMENT_TTL_HOURS` | `24` | Age after which abandoned papers are swept |
+
+Also set a monthly spending limit in your OpenAI account.
+
+---
+
 ### Tests
 
 ```bash
-npm run test:citations
+npm run test:unit        # all unit tests
+npm run test:citations   # citation parsing + PDF highlighting
+npm run test:security    # access code, rate limits, file checks, cleanup rules
 ```
 
 Checks citation parsing, and that every chunk the upload route creates is found and highlighted on its page in the viewer, using both eval papers.

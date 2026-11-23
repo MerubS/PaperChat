@@ -6,6 +6,7 @@ import { PineconeStore } from '@langchain/pinecone';
 import { buildNumberedContext, extractCitations } from './citations';
 import * as dotenv from 'dotenv';
 import { generateAnswer } from './llm';
+import { checkPageCount, staleNamespaces } from './security';
 
 
 dotenv.config();
@@ -31,19 +32,25 @@ function getEmbeddings(): OpenAIEmbeddings {
   return embeddings;
 }
 
-export async function uploadPDF(pdfUrl: string , documentId: string ) {
+/**
+ * Parses a PDF, chunks it and stores the embeddings in its own Pinecone namespace.
+ * `source` is a file path (eval scripts) or an in-memory Blob (API uploads), so
+ * uploads never touch the disk.
+ */
+export async function uploadPDF(source: string | Blob, documentId: string) {
   try{
-    console.log('Loading PDF from URL:', pdfUrl);
-    const loader = new PDFLoader(pdfUrl);
+    const loader = new PDFLoader(source);
     const documents = await loader.load();
     console.log('PDF loaded successfully. Number of pages:', documents.length);
+    // Enforce the page limit before paying for embeddings
+    if (typeof source !== 'string') checkPageCount(documents.length);
     
     documents.forEach((doc:any, index:number) => {
       doc.metadata = {
         ...doc.metadata,
         documentId: `${documentId}_page_${index + 1}`,
         pageNumber: index + 1,
-        source: pdfUrl
+        source: typeof source === 'string' ? source : 'upload'
       };
     });
 
@@ -132,3 +139,27 @@ export async function deleteDocument(documentId: string) {
         throw error;
     }
 }
+
+let lastSweep = 0;
+
+/**
+ * Deletes uploaded papers older than DOCUMENT_TTL_HOURS from Pinecone, catching
+ * any whose "New Chat" / tab-close cleanup never ran. Only touches namespaces
+ * created by the upload API ("u-<timestamp>-<uuid>"), never the eval data.
+ * Runs at most every 10 minutes per server instance.
+ */
+export async function sweepStaleDocuments(now = Date.now()) {
+  if (now - lastSweep < 10 * 60 * 1000) return { deleted: 0, skipped: true };
+  lastSweep = now;
+
+  const pineconeIndex = getPineconeClient().index(process.env.PINECONE_INDEX_NAME!);
+  const stats = await pineconeIndex.describeIndexStats();
+  const stale = staleNamespaces(Object.keys(stats.namespaces ?? {}), now);
+
+  for (const ns of stale) {
+    await pineconeIndex.namespace(ns).deleteAll();
+  }
+  if (stale.length) console.log(`Swept ${stale.length} stale document namespace(s).`);
+  return { deleted: stale.length, skipped: false };
+}
+

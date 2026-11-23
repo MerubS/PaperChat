@@ -503,3 +503,18 @@ body {
 @media (max-width: 900px) {
   .pdf-panel { position: fixed; inset: 0; width: 100%; z-index: 50; }
 }
+
+/* Access code */
+.access-code-input {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #ececec;
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  outline: none;
+}
+.access-code-input:focus { border-color: #6366f1; }
