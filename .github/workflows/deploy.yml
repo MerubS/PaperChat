@@ -70,8 +70,15 @@ jobs:
             curl -sSfL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscli.zip
             unzip -q /tmp/awscli.zip -d /tmp && sudo /tmp/aws/install
           fi
-          aws secretsmanager describe-secret --secret-id paperchat/pinecone-api-key >/dev/null \
-            || { echo "::error::Create the secret paperchat/pinecone-api-key in Secrets Manager (us-east-1) first. See DEPLOY.md."; exit 1; }
+          # Stop only if the secret is definitely missing; if the deploy role can't check, warn and continue.
+          if out=$(aws secretsmanager describe-secret --secret-id paperchat/pinecone-api-key 2>&1); then
+            echo "Found paperchat/pinecone-api-key in us-east-1."
+          elif echo "$out" | grep -q ResourceNotFoundException; then
+            echo "::error::Secret paperchat/pinecone-api-key not found in us-east-1. Create it there (DEPLOY.md, Option A step 3)."
+            exit 1
+          else
+            echo "::warning::Couldn't verify the Pinecone secret, continuing. Make sure paperchat/pinecone-api-key exists in us-east-1. Details: $out"
+          fi
 
       - name: Deploy with CDK
         working-directory: infra
