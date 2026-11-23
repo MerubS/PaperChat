@@ -1,11 +1,12 @@
 // Run with: npm run test:citations
-// Checks citation parsing, and that every chunk the upload route creates can be
-// found and highlighted on its page by the PDF viewer (pdf.js text items).
+// Checks citation parsing, and that every chunk the backend stores can be found and
+// highlighted on its page by the PDF viewer (pdf.js text items).
+// tests/fixtures/chunks.json comes from the Python backend's chunker:
+//   python backend/scripts/export_chunks.py
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { readFileSync } from 'node:fs';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { extractCitations, buildNumberedContext, findPassageItems, squash } from '../src/lib/citations';
 
@@ -44,10 +45,12 @@ for (const paper of ['aac-paper.pdf', 'proxemics-paper.pdf']) {
   test(`every chunk of ${paper} is located on its page in the viewer`, async () => {
     const file = path.join(__dirname, '..', 'evals', 'papers', paper);
 
-    // Same chunking as uploadPDF in src/lib/rag.ts
-    const pages = await new PDFLoader(file).load();
-    pages.forEach((d, i) => (d.metadata = { ...d.metadata, pageNumber: i + 1 }));
-    const chunks = await new RecursiveCharacterTextSplitter({ chunkSize: 500, chunkOverlap: 150 }).splitDocuments(pages);
+    // Chunks exactly as the backend stored them (pypdf + RecursiveCharacterTextSplitter 500/150)
+    const fixture = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'chunks.json'), 'utf8'));
+    const chunks = (fixture[paper] as Array<{ page: number; text: string }>).map((c) => ({
+      pageContent: c.text,
+      metadata: { pageNumber: c.page },
+    }));
 
     // Same text items the browser viewer gets from pdf.js
     const fs = await import('node:fs/promises');
@@ -64,16 +67,16 @@ for (const paper of ['aac-paper.pdf', 'proxemics-paper.pdf']) {
       const items = itemsByPage[c.metadata.pageNumber];
       const hit = findPassageItems(items, c.pageContent);
       if (!hit.size) { misses.push(c.pageContent.slice(0, 60)); continue; }
-      // Chunks whose text the upload extractor read cleanly must be highlighted in full.
-      const pageChars = new Set(squash(items.join('')));
-      if ([...squash(c.pageContent)].every((ch) => pageChars.has(ch))) {
+      // Where the backend's text appears on the page as-is, the highlight must cover all of it.
+      // (The rest differ between PDF engines, e.g. inline math, and are matched approximately.)
+      if (squash(items.join('')).includes(squash(c.pageContent))) {
         clean++;
         const highlighted = squash([...hit].map((i) => items[i]).join(''));
         if (highlighted.includes(squash(c.pageContent))) cleanExact++;
       }
     }
     console.log(`  ${paper}: ${chunks.length} chunks located, ${misses.length} missed; ` +
-      `${cleanExact}/${clean} clean chunks highlighted in full (the rest contain garbled math symbols)`);
+      `${cleanExact}/${clean} chunks found verbatim are highlighted in full (the rest differ between PDF engines, e.g. math)`);
     assert.equal(misses.length, 0, `not found: ${misses.join(' | ')}`);
     assert.equal(cleanExact, clean);
   });
