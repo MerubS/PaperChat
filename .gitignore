@@ -3,3 +3,8 @@ package-lock.json
 uploads/
 .env
 .next/
+out/
+infra/cdk.out/
+__pycache__/
+.venv/
+.pytest_cache/

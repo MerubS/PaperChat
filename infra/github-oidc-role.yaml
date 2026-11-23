@@ -1,0 +1,105 @@
+# One-time setup, in the AWS console (no CLI needed):
+#   CloudFormation -> Create stack -> "With new resources" -> Upload this file
+#   -> stack name "paperchat-github-deploy" -> keep the defaults -> tick the IAM
+#   acknowledgement -> Submit.
+# When it finishes, copy the DeployRoleArn output into the GitHub repository secret
+# AWS_DEPLOY_ROLE_ARN.
+#
+# Lets GitHub Actions deploy PaperChat with short-lived credentials (OpenID Connect):
+# no AWS access keys stored anywhere. Only workflows on the production branch of the repo
+# below can use the role.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: GitHub Actions OIDC deploy role for PaperChat
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: MerubS/PaperChat
+    Description: owner/repo allowed to deploy
+  Branch:
+    Type: String
+    Default: production
+  CreateOidcProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Set to false if this account already has the token.actions.githubusercontent.com identity provider
+
+Conditions:
+  MakeProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: MakeProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+      ThumbprintList: [6938fd4d98bab03faadb97b34396831e3780aea1]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: paperchat-github-deploy
+      Description: Assumed by GitHub Actions to deploy PaperChat with CDK
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:ref:refs/heads/${Branch}
+      Policies:
+        - PolicyName: cdk-deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # After bootstrap, CDK deploys by assuming its own bootstrap roles
+              - Sid: AssumeCdkRoles
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
+              # `cdk bootstrap` creates the CDKToolkit stack (S3, ECR, IAM roles, SSM parameter)
+              - Sid: Bootstrap
+                Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - ecr:*
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:AddTagsToResource
+                  - iam:GetRole
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:GetPolicy
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                  - iam:ListPolicyVersions
+                Resource: '*'
+              - Sid: CheckSecretExists
+                Effect: Allow
+                Action: secretsmanager:DescribeSecret
+                Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:paperchat/*
+
+Outputs:
+  DeployRoleArn:
+    Description: Put this in the GitHub secret AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn
