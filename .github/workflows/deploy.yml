@@ -32,7 +32,7 @@ jobs:
           python -m pytest -q tests
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22  # pdfjs-dist (PDF viewer) needs Node 22+
       - name: Frontend tests
         run: |
           npm ci --legacy-peer-deps
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22  # pdfjs-dist (PDF viewer) needs Node 22+
 
       - name: Build the static site
         run: |
