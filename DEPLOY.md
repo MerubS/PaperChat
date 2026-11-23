@@ -16,6 +16,33 @@ Everything goes into **us-east-1** unless you set `CDK_DEFAULT_REGION`.
 
 ---
 
+## Option A: deploy from GitHub, nothing to install (recommended for a new AWS account)
+
+Everything happens in two browser tabs: the **AWS console** and your **GitHub repo**. GitHub Actions builds the Docker images on a free ARM runner and deploys with short-lived credentials (OpenID Connect), so no AWS access keys are created or stored.
+
+**In the AWS console** (top-right region picker: **US East (N. Virginia) us-east-1**):
+
+1. **Secure the account:** if you're signed in as the root user, turn on MFA (account menu → Security credentials).
+2. **Turn on the Bedrock models:** see step 2 below.
+3. **Store the Pinecone key:** Secrets Manager → **Store a new secret** → *Other type of secret* → **Plaintext** tab → delete the `{}` and paste **only** the key → Next → name it exactly `paperchat/pinecone-api-key` → Next → Next → Store.
+   *(Optional access code: same steps, name `paperchat/access-code`, value = your code.)*
+4. **Create the GitHub deploy role:** download [`infra/github-oidc-role.yaml`](./infra/github-oidc-role.yaml) → CloudFormation → **Create stack** → *With new resources* → **Upload a template file** → stack name `paperchat-github-deploy` → Next → Next → tick *"I acknowledge that AWS CloudFormation might create IAM resources with custom names"* → Submit. When it shows `CREATE_COMPLETE`, open the **Outputs** tab and copy **DeployRoleArn**.
+
+**In GitHub** (`MerubS/PaperChat`):
+
+5. Settings → Secrets and variables → Actions → **New repository secret**: name `AWS_DEPLOY_ROLE_ARN`, value = the ARN you copied. *(Optional: **Variables** tab → `ALERT_EMAIL` = your email, for alarms.)*
+6. Make sure the AWS code is merged into `main` (the role only trusts `main`).
+7. **Actions** tab → **Deploy to AWS** → **Run workflow**. It runs the tests, then deploys (about 15–20 minutes the first time). The run's **Summary** shows your `SiteUrl`.
+8. If you set `ALERT_EMAIL`, confirm the AWS Notifications email.
+
+**Run the evals once:** Lambda console → open the function named `PaperChat-EvalFunction…` → **Test** tab → create a test event (any name, keep `{}`) → **Test**. It takes a few minutes; scores appear on the **PaperChat** dashboard in CloudWatch.
+
+To redeploy after changes, run the workflow again.
+
+---
+
+## Option B: deploy from your computer
+
 ## 1. Install the tools (once)
 
 | Tool | Check | Get it |

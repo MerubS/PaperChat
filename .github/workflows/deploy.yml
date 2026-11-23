@@ -1,0 +1,90 @@
+# Tests, then deploys PaperChat to AWS with CDK. Run it from the Actions tab
+# ("Deploy to AWS" -> "Run workflow"). No local tools or AWS keys needed:
+# GitHub signs in to AWS with OIDC, using the role from infra/github-oidc-role.yaml.
+#
+# Repository settings -> Secrets and variables -> Actions:
+#   secret   AWS_DEPLOY_ROLE_ARN   (output of the github-oidc-role stack)
+#   variable ALERT_EMAIL           (optional: where CloudWatch alarms are sent)
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt -r requirements-evals.txt pytest httpx "moto[s3]"
+          python -m pytest -q tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Frontend tests
+        run: |
+          npm ci --legacy-peer-deps
+          npm test
+
+  deploy:
+    needs: test
+    # ARM runner: builds the Lambda (Graviton/arm64) images natively
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write   # lets GitHub sign in to AWS with OIDC
+      contents: read
+    env:
+      AWS_REGION: us-east-1
+      CDK_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the static site
+        run: |
+          npm ci --legacy-peer-deps
+          npm run build
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Check the Pinecone secret exists
+        run: |
+          if ! command -v aws >/dev/null; then
+            curl -sSfL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscli.zip
+            unzip -q /tmp/awscli.zip -d /tmp && sudo /tmp/aws/install
+          fi
+          aws secretsmanager describe-secret --secret-id paperchat/pinecone-api-key >/dev/null \
+            || { echo "::error::Create the secret paperchat/pinecone-api-key in Secrets Manager (us-east-1) first. See DEPLOY.md."; exit 1; }
+
+      - name: Deploy with CDK
+        working-directory: infra
+        run: |
+          npm ci
+          npx cdk bootstrap --require-approval never
+          npx cdk deploy --require-approval never --outputs-file outputs.json \
+            -c alertEmail="${{ vars.ALERT_EMAIL }}"
+
+      - name: Show the site URL
+        working-directory: infra
+        run: |
+          node -e '
+            const o = require("./outputs.json").PaperChat;
+            console.log("## PaperChat deployed 🚀\n" + Object.entries(o).map(([k, v]) => `- **${k}**: ${v}`).join("\n"));
+          ' | tee -a "$GITHUB_STEP_SUMMARY"
