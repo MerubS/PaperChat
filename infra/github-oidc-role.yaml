@@ -6,7 +6,7 @@
 # AWS_DEPLOY_ROLE_ARN.
 #
 # Lets GitHub Actions deploy PaperChat with short-lived credentials (OpenID Connect):
-# no AWS access keys stored anywhere. Only workflows on the main branch of the repo
+# no AWS access keys stored anywhere. Only workflows on the production branch of the repo
 # below can use the role.
 AWSTemplateFormatVersion: '2010-09-09'
 Description: GitHub Actions OIDC deploy role for PaperChat
@@ -18,7 +18,7 @@ Parameters:
     Description: owner/repo allowed to deploy
   Branch:
     Type: String
-    Default: main
+    Default: production
   CreateOidcProvider:
     Type: String
     Default: 'true'

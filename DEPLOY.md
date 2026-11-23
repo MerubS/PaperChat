@@ -31,8 +31,8 @@ Everything happens in two browser tabs: the **AWS console** and your **GitHub re
 **In GitHub** (`MerubS/PaperChat`):
 
 5. Settings → Secrets and variables → Actions → **New repository secret**: name `AWS_DEPLOY_ROLE_ARN`, value = the ARN you copied. *(Optional: **Variables** tab → `ALERT_EMAIL` = your email, for alarms.)*
-6. Make sure the AWS code is merged into `main` (the role only trusts `main`).
-7. **Actions** tab → **Deploy to AWS** → **Run workflow**. It runs the tests, then deploys (about 15–20 minutes the first time). The run's **Summary** shows your `SiteUrl`.
+6. Make sure the AWS code is on the `production` branch (the role only trusts `production`; set the `Branch` parameter in step 4 to use another branch).
+7. **Actions** tab → **Deploy to AWS** → **Run workflow** → choose branch **production** → **Run workflow**. It runs the tests, then deploys (about 15–20 minutes the first time). The run's **Summary** shows your `SiteUrl`.
 8. If you set `ALERT_EMAIL`, confirm the AWS Notifications email.
 
 **Run the evals once:** Lambda console → open the function named `PaperChat-EvalFunction…` → **Test** tab → create a test event (any name, keep `{}`) → **Test**. It takes a few minutes; scores appear on the **PaperChat** dashboard in CloudWatch.
