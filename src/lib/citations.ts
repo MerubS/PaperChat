@@ -82,7 +82,7 @@ export function squash(s: string): string {
  * Text is normalized first (see squash). If the passage still isn't found as a
  * whole (e.g. math symbols that the upload-side extractor decoded differently),
  * the passage is split wherever it has a character that never appears on the
- * page, and the remaining pieces are matched in order.
+ * page and into 30-character windows, and the windows are matched in order.
  */
 export function findPassageItems(items: string[], passage: string): Set<number> {
   const result = new Set<number>();
@@ -120,14 +120,16 @@ function locate(pageText: string, passage: string): [number, number] | null {
 
   // Split on characters the page never contains, then match the pieces in order.
   const pageChars = new Set(pageText);
+  // Then cut long pieces into 30-character windows, so text the extractors order differently
+  // (e.g. inline math) only costs the windows it touches.
   const pieces = target.split('').reduce<string[]>((acc, ch) => {
     if (pageChars.has(ch)) acc[acc.length - 1] += ch;
     else if (acc[acc.length - 1] !== '') acc.push('');
     return acc;
-  }, ['']).filter((p) => p.length >= 8);
+  }, ['']).flatMap((p) => p.match(/.{1,30}/gu) ?? []).filter((p) => p.length >= 8);
   if (!pieces.length) return null;
 
-  const maxGap = 40; // allowed unmatched characters between pieces
+  const maxGap = 120; // allowed unmatched characters between pieces
   let best: { start: number; end: number; covered: number } | null = null;
 
   // Try each occurrence of the first long piece as a starting point.

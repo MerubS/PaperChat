@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
 import dynamic from 'next/dynamic';
 import type { Citation } from '@/lib/citations';
+import { apiPost, deleteDocument, uploadPdf, type ApiResult } from '@/lib/apiClient';
 
 // pdf.js only runs in the browser
 const PdfViewer = dynamic(() => import('./PdfViewer'), { ssr: false });
@@ -51,6 +52,7 @@ interface Message {
   content: string;
   timestamp: string;
   citations?: Citation[];
+  searches?: string[];
 }
 
 // Renders the answer text with [n] markers turned into clickable citation buttons.
@@ -86,18 +88,6 @@ function precheckFile(f: File | undefined): string | null {
   if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return 'Please upload a PDF file';
   if (f.size > MAX_UPLOAD_MB * 1024 * 1024) return `PDFs must be ${MAX_UPLOAD_MB} MB or smaller`;
   return null;
-}
-
-// Tells the server to delete a paper's stored embeddings. keepalive/sendBeacon let it finish during tab close.
-function deleteDocumentOnServer(documentId: string, accessCode: string, onUnload = false) {
-  if (!documentId) return;
-  const body = JSON.stringify({ documentId, accessCode: accessCode || undefined });
-  if (onUnload && navigator.sendBeacon) {
-    navigator.sendBeacon('/api/document', new Blob([body], { type: 'application/json' }));
-    return;
-  }
-  fetch('/api/document', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
-    .catch(() => { /* the server also sweeps stale papers */ });
 }
 
 const SUGGESTIONS = [
@@ -138,16 +128,14 @@ export default function Home() {
   // Delete this paper's data from Pinecone when the tab closes
   useEffect(() => {
     if (!documentId) return;
-    const onHide = () => deleteDocumentOnServer(documentId, accessCode, true);
+    const onHide = () => deleteDocument(documentId, accessCode);
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
   }, [documentId, accessCode]);
 
-  const authHeaders = (): Record<string, string> => (accessCode ? { 'x-access-code': accessCode } : {});
-
   // Shows the access-code field when the server asks for one
-  const handleApiError = (res: Response, data: any, fallback: string) => {
-    if (res.status === 401) {
+  const handleApiError = ({ status, data }: ApiResult, fallback: string) => {
+    if (status === 401) {
       setNeedsCode(true);
       setError(accessCode ? 'That access code is incorrect.' : 'This demo needs an access code.');
     } else {
@@ -193,16 +181,9 @@ export default function Home() {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: formData,
-      });
-
-      const data = await res.json().catch(() => ({}));
+      // Presigned S3 upload, then the API ingests it
+      const res = await uploadPdf(file, accessCode);
+      const data = res.data;
 
       if (res.ok && data.success) {
         setNeedsCode(false);
@@ -214,7 +195,7 @@ export default function Home() {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
       } else {
-        handleApiError(res, data, 'Upload failed. Please try again.');
+        handleApiError(res, 'Upload failed. Please try again.');
       }
     } catch (err) {
       setError('Upload failed. Please check your connection and try again.');
@@ -241,23 +222,19 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ question, documentId }),
-      });
-
-      const data = await res.json().catch(() => ({}));
+      const res = await apiPost('/api/query', { question, documentId }, accessCode);
+      const data = res.data;
 
       if (res.ok && data.success) {
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: data.response || 'I could not find an answer to that question.',
           citations: data.citations || [],
+          searches: data.searches || [],
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
       } else {
-        handleApiError(res, data, 'Query failed. Please try again.');
+        handleApiError(res, 'Query failed. Please try again.');
       }
     } catch (err) {
       setError('Failed to get answer. Please try again.');
@@ -270,7 +247,7 @@ export default function Home() {
   // Reset everything
   const handleReset = () => {
     // Free this paper's embeddings in Pinecone
-    deleteDocumentOnServer(documentId, accessCode);
+    deleteDocument(documentId, accessCode);
     setFile(null);
     setDocumentId('');
     setUploaded(false);
@@ -312,7 +289,7 @@ export default function Home() {
 
         <div className="sidebar-footer">
           <p>Powered by</p>
-          <p className="footer-stack">LangChain · OpenAI · Pinecone</p>
+          <p className="footer-stack">AWS Bedrock · LangChain · Pinecone</p>
         </div>
       </aside>
 
@@ -388,7 +365,7 @@ export default function Home() {
 
             {/* Features */}
             <div className="features">
-              {['Semantic Search', 'GPT-5.6 Powered', 'Instant Answers'].map(f => (
+              {['Semantic Search', 'GPT-5.6 on Bedrock', 'Instant Answers'].map(f => (
                 <span key={f} className="feature-tag">✦ {f}</span>
               ))}
             </div>
@@ -422,6 +399,11 @@ export default function Home() {
                       <span className="message-time">{msg.timestamp}</span>
                     </div>
                     <AnswerText text={msg.content} citations={msg.citations} onCite={setActiveCitation} />
+                    {msg.searches && msg.searches.length > 1 && (
+                      <p className="agent-searches" title="Extra searches the agent ran to answer this">
+                        🔎 Also searched: {msg.searches.slice(1).map(q => `“${q}”`).join(', ')}
+                      </p>
+                    )}
                     {msg.citations && msg.citations.length > 0 && (
                       <div className="cite-chips" aria-label="Sources">
                         {msg.citations.map(c => (

@@ -1,6 +1,6 @@
 # 📄 PaperChat
 
-> Chat with your research papers using AI. Upload any PDF and ask questions in natural language — powered by RAG, LangChain, OpenAI GPT-5.6, and Pinecone.
+> Chat with your research papers using AI. Upload any PDF and ask questions in natural language — an agentic RAG app on AWS: Python on Lambda, Amazon Bedrock (OpenAI GPT-5.6 + Titan embeddings), LangChain, Pinecone, S3 and CloudFront.
 
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Visit%20Site-black?style=for-the-badge&logo=vercel)](https://paperchat-bixg7nbyg-merub-shaikhs-projects.vercel.app/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
@@ -49,29 +49,41 @@ Built as part of a research project at **Illinois Institute of Technology**, whe
 
 ## How It Works
 
-PaperChat uses a **RAG (Retrieval-Augmented Generation)** pipeline:
+```
+📄 PDF upload            Browser → S3 (presigned POST; size and type enforced by S3)
+     ↓
+📝 Text extraction       pypdf, one text per page (Lambda reads the PDF from S3, then deletes it)
+     ↓
+✂️  Chunking             LangChain RecursiveCharacterTextSplitter (500 chars, 150 overlap)
+     ↓
+🔢 Embeddings            Amazon Titan Text Embeddings V2 on Bedrock (1024 dims, parallel calls)
+     ↓
+🗄️  Vector storage       Pinecone, one namespace per paper
+     ↓
+❓ Question
+     ↓
+🔍 Retrieval             Embed question + Pinecone top-6 (sub-second; latency logged to CloudWatch)
+     ↓
+🤖 Agent                 GPT-5.6 Sol on Bedrock (Converse API) answers from the passages, or calls
+                         its search_paper tool for more (up to 2 extra searches), e.g. for
+                         questions that span method AND results
+     ↓
+🔗 Citations             [n] markers mapped back to page + quoted passage
+     ↓
+💡 Answer; click a citation to open the PDF at that page with the passage highlighted
+```
+
+### Architecture on AWS
 
 ```
-📄 PDF Upload
-     ↓
-📝 Text Extraction       (LangChain PDFLoader)
-     ↓
-✂️  Chunking             (RecursiveCharacterTextSplitter)
-     ↓                    chunk_size=1000, overlap=200
-🔢 Embedding Generation  (OpenAI text-embedding-ada-002)
-     ↓                    1536-dimensional vectors
-🗄️  Vector Storage       (Pinecone - namespace per document)
-     ↓
-❓ User asks question
-     ↓
-🔍 Semantic Search       (Pinecone similarity search - top 6 chunks)
-     ↓
-🤖 Answer Generation     (GPT-5.6 + numbered context, cites passages as [n])
-     ↓
-🔗 Citations             ([n] markers mapped back to page + quoted passage)
-     ↓
-💡 Answer + citations returned; click a citation to highlight it in the PDF
+Browser ──► CloudFront ──► S3 (static Next.js site)
+                └─ /api/* ──► Lambda function URL (IAM auth via CloudFront OAC)
+                               Python FastAPI in a Docker image: Bedrock + Pinecone
+Browser ──► S3 uploads bucket (presigned POST; deleted after ingest, 1-day lifecycle backup)
+EventBridge (daily) ──► Eval Lambda (RAGAS) ──► CloudWatch metrics ──► alarms < 0.85 ──► email
 ```
+
+Infrastructure is AWS CDK (`infra/`). See **[DEPLOY.md](./DEPLOY.md)** for step-by-step deployment.
 
 ---
 ## 📊 Evaluation Results
@@ -117,19 +129,11 @@ Evaluated on 2 accessibility research papers:
 
 ✅ RAGAS Diagnosis: *"All metrics look good! Your RAG system is performing well."*
 
-### 🧪 Run Evals Yourself
+### 🧪 Evals in Production
 
-```bash
-# Install Python dependencies
-pip install ragas langchain-openai langchain-pinecone pinecone python-dotenv datasets
+`backend/evals/run.py` runs as its own Lambda **daily**: it answers the 20 questions in `evals/dataset.json` with the same agent the app uses, scores them with RAGAS 0.4 (Faithfulness, Answer Relevancy, Context Precision, Context Recall) using Claude on Bedrock as the judge, and publishes the scores to CloudWatch. **Alarms email you if any score drops below 0.85** (a RAG quality regression) or if the eval run fails. Run it on demand with `aws lambda invoke` (see DEPLOY.md).
 
-# Run evaluation pipeline
-python evals/run_evals.py
-```
-
-Results are saved to `evals/results.json`.
-
-The eval dataset (`evals/dataset.json`) contains 20 ground-truth question-answer pairs across both papers, covering factual questions, methodology questions, and finding-based questions.
+> The iteration history above was measured on the original stack (GPT-4 answers, OpenAI embeddings). The AWS version uses GPT-5.6 Sol and Titan embeddings, so check its scores on the CloudWatch dashboard after the first eval run.
 
 ---
 
@@ -137,232 +141,98 @@ The eval dataset (`evals/dataset.json`) contains 20 ground-truth question-answer
 
 | Category | Technology |
 |----------|-----------|
-| **Framework** | Next.js 15 (App Router) |
-| **Language** | TypeScript |
-| **AI Framework** | LangChain.js 0.3.x |
-| **LLM** | OpenAI GPT-5.6 Sol (configurable via `OPENAI_CHAT_MODEL`) |
-| **Embeddings** | OpenAI text-embedding-ada-002 (1536 dims) |
-| **Vector Database** | Pinecone |
-| **Styling** | Custom CSS (Dark Mode) |
-| **Deployment** | Vercel (Serverless) |
+| **Frontend** | Next.js 15 (static export), React 19, react-pdf |
+| **Backend** | Python 3.12, FastAPI, Mangum, in a Docker image on AWS Lambda (ARM) |
+| **LLM** | OpenAI GPT-5.6 Sol on Amazon Bedrock (Converse API, tool use) |
+| **Embeddings** | Amazon Titan Text Embeddings V2 (1024 dims) |
+| **AI Framework** | LangChain text splitters; RAGAS 0.4 for evaluation |
+| **Vector Database** | Pinecone (serverless) |
+| **AWS** | Lambda, S3, CloudFront, Bedrock, Secrets Manager, EventBridge, CloudWatch, SNS |
+| **Infrastructure** | AWS CDK (TypeScript) |
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+**Deploy to AWS:** follow **[DEPLOY.md](./DEPLOY.md)** (about 15 minutes; needs an AWS account, Docker and a Pinecone key).
 
-- Node.js 18+
-- OpenAI API Key → [Get one here](https://platform.openai.com/api-keys)
-- Pinecone API Key → [Get one here](https://app.pinecone.io)
-
----
-
-### 1. Clone the Repository
+**Run locally** (uses your AWS credentials for Bedrock and S3):
 
 ```bash
-git clone https://github.com/MerubS/PaperChat.git
-cd PaperChat
-```
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export PAPERCHAT_PINECONE_API_KEY=your-pinecone-key   # instead of Secrets Manager
+export UPLOAD_BUCKET=your-uploads-bucket               # e.g. the bucket CDK created
+uvicorn app.main:app --port 8000
 
-### 2. Install Dependencies
-
-```bash
+# Frontend (new terminal, repo root)
 npm install --legacy-peer-deps
+npm run dev            # http://localhost:3000; /api/* is forwarded to :8000
 ```
-
-### 3. Set Up Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-PINECONE_API_KEY=your-pinecone-api-key-here
-PINECONE_INDEX_NAME=paperchat
-```
-
-### 4. Set Up Pinecone Index
-
-1. Go to [app.pinecone.io](https://app.pinecone.io)
-2. Click **Create Index**
-3. Use these settings:
-
-```
-Name:        paperchat
-Dimensions:  1536
-Metric:      cosine
-Vector Type: Dense
-```
-
-### 5. Run the Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
----
 
 ## 📁 Project Structure
 
 ```
 PaperChat/
-├── public/
-│   └── screenshots/          # README screenshots
-├── src/
+├── src/                       # Next.js frontend (static export)
+│   ├── app/page.tsx           # Chat UI
+│   ├── app/PdfViewer.tsx      # PDF side panel with highlighted citations
+│   └── lib/
+│       ├── apiClient.ts       # API calls, presigned S3 upload
+│       └── citations.ts       # Citation types + passage highlighting
+├── backend/                   # Python API (Docker image on Lambda)
 │   ├── app/
-│   │   ├── api/
-│   │   │   ├── upload/
-│   │   │   │   └── route.ts  # PDF upload & processing endpoint
-│   │   │   └── query/
-│   │   │       └── route.ts  # Question answering endpoint
-│   │   ├── globals.css       # Global dark mode styles
-│   │   ├── layout.tsx        # Root layout
-│   │   └── page.tsx          # Main chat UI
-│   ├── lib/
-│   │   └── rag.ts            # Core RAG logic (LangChain + Pinecone)
-│   └── test.ts               # Backend test script
-├── .env                      # Environment variables (not committed)
-├── .gitignore
-├── next.config.js
-├── package.json
-└── tsconfig.json
+│   │   ├── main.py            # FastAPI routes + Lambda handler
+│   │   ├── agent.py           # Agentic RAG (Bedrock Converse + search tool)
+│   │   ├── vectors.py         # Titan embeddings + Pinecone
+│   │   ├── pdf.py             # pypdf extraction + LangChain chunking
+│   │   ├── security.py        # Access code, rate limits, validation
+│   │   ├── citations.py       # [n] citation parsing
+│   │   ├── metrics.py         # CloudWatch metrics (Embedded Metric Format)
+│   │   └── config.py          # Settings + Secrets Manager
+│   ├── evals/run.py           # Daily RAGAS eval Lambda
+│   ├── tests/                 # pytest (Bedrock/Pinecone fakes, moto S3)
+│   └── Dockerfile             # targets: api, evals
+├── infra/                     # AWS CDK stack
+├── evals/                     # Eval dataset + papers
+├── tests/                     # Frontend tests (citation highlighting)
+└── DEPLOY.md
 ```
 
 ---
 
 ## 🔌 API Endpoints
 
-### `POST /api/upload`
+All `POST` with JSON, behind CloudFront at `/api/*`. When an access code is configured, send it as `x-access-code`.
 
-Uploads and processes a PDF file into vector embeddings.
-
-**Request:**
-```
-Content-Type: multipart/form-data
-Body: { file: File (PDF, max 10MB) }
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "documentId": "550e8400-e29b-41d4-a716-446655440000",
-  "chunks": 25,
-  "pages": 10
-}
-```
-
----
-
-### `POST /api/query`
-
-Queries the document and returns an AI-generated answer.
-
-**Request:**
-```json
-{
-  "question": "What is this paper about?",
-  "documentId": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "response": "The study recruited AAC users and their partners [1]. Participants used gaze and facial expression [2].",
-  "query": "What is this paper about?",
-  "citations": [
-    { "id": 1, "page": 4, "quote": "The study (1) foregrounds AAC users' lived expertise..." },
-    { "id": 2, "page": 6, "quote": "Participants described..." }
-  ]
-}
-```
+| Endpoint | Body | Returns |
+|---|---|---|
+| `/api/upload-url` | `{ size }` | `{ documentId, upload: { url, fields } }`, a presigned S3 POST (5 min) |
+| `/api/ingest` | `{ documentId }` | `{ pages, chunks }`; the PDF is deleted from S3 afterwards |
+| `/api/query` | `{ question, documentId }` | `{ response, citations: [{ id, page, quote }], searches }` |
+| `/api/document` | `{ documentId }` | Deletes the paper's vectors |
 
 ---
 
 ## 🔒 Security & Limits
 
-The API is public by default, so it's protected with:
-
-- **Optional access code**: set `ACCESS_CODE` and every API call must send it. The app asks for it once per browser tab. Comparison is constant-time.
-- **Per-IP rate limits**: uploads and questions are rate-limited and return `429` with `Retry-After`. Limits are in memory per server instance; on multi-instance serverless, swap in a shared store (e.g. Redis/DynamoDB).
-- **Server-side file checks**: real PDF bytes (`%PDF-` header, not just the filename or MIME type), size limit, page limit (checked before paying for embeddings), and oversized bodies rejected from `Content-Length` before they're read.
-- **No temp files**: uploads are parsed straight from memory.
-- **Pinecone cleanup**: a paper's vectors are deleted on **New Chat** and when the tab closes (`sendBeacon`). Papers whose cleanup never ran are swept after `DOCUMENT_TTL_HOURS`. The API only accepts and deletes its own `u-<timestamp>-<uuid>` namespaces, so eval data (`aac`, `proxemics`) can't be queried or deleted through it.
-- **Input validation and generic errors**: question length limit, document ID format check, and internal errors logged on the server rather than sent to the browser.
-
-| Env var | Default | |
-|---|---|---|
-| `ACCESS_CODE` | *(unset = open)* | Shared code required for all API calls |
-| `MAX_UPLOAD_MB` | `10` | Max PDF size (also update `MAX_UPLOAD_MB` in `page.tsx`) |
-| `MAX_PDF_PAGES` | `60` | Max pages per PDF |
-| `MAX_QUESTION_CHARS` | `1000` | Max question length |
-| `UPLOADS_PER_HOUR` | `5` | Uploads per IP per hour |
-| `QUESTIONS_PER_10_MIN` | `30` | Questions per IP per 10 minutes |
-| `DOCUMENT_TTL_HOURS` | `24` | Age after which abandoned papers are swept |
-
-Also set a monthly spending limit in your OpenAI account.
-
----
+- **Only CloudFront can call the API**: the Lambda function URL uses IAM auth, and CloudFront signs requests with Origin Access Control.
+- **Optional access code** (`paperchat/access-code` in Secrets Manager), compared in constant time.
+- **Per-IP rate limits** on uploads and questions, keyed on `CloudFront-Viewer-Address` (which clients can't spoof).
+- **Uploads**: S3 enforces size and type in the presigned policy; the API re-checks the real `%PDF-` bytes and the page count **before** paying for embeddings. PDFs are deleted right after ingest, with a 1-day lifecycle rule as backup.
+- **Cleanup**: a paper's vectors are deleted on New Chat and tab close, and abandoned ones are swept after 24 h. The API only accepts its own `u-<timestamp>-<uuid>` IDs, so eval data can't be touched.
+- **Secrets** live in Secrets Manager; IAM permissions are least-privilege; errors returned to the browser are generic (details go to CloudWatch Logs).
 
 ### Tests
 
 ```bash
-npm run test:unit        # all unit tests
-npm run test:citations   # citation parsing + PDF highlighting
-npm run test:security    # access code, rate limits, file checks, cleanup rules
+cd backend && pip install -r requirements.txt -r requirements-evals.txt pytest httpx "moto[s3]"
+python -m pytest tests      # API flow, agent, security, evals (fakes for Bedrock/Pinecone, moto for S3)
+
+npm test                    # frontend: citation parsing + PDF highlighting on the backend's real chunks
 ```
-
-Checks citation parsing, and that every chunk the upload route creates is found and highlighted on its page in the viewer, using both eval papers.
-
----
-
-## Configuration
-
-Customize the RAG pipeline in `src/lib/rag.ts`:
-
-```typescript
-// Chunking settings
-const splitter = new RecursiveCharacterTextSplitter({
-  chunkSize: 1000,    // Increase for more context per chunk
-  chunkOverlap: 200,  // Overlap to prevent cutting ideas mid-sentence
-});
-
-// Retrieval settings (src/lib/rag.ts)
-const docs = await vectorStore.similaritySearch(query, 6); // number of chunks to retrieve
-```
-
-```env
-# Model settings (.env), all optional
-OPENAI_CHAT_MODEL=gpt-5.6-sol        # default; gpt-5.6-terra is cheaper and faster
-OPENAI_REASONING_EFFORT=none         # none | low | medium | high
-EVAL_JUDGE_MODEL=gpt-5.6-terra       # RAGAS judge model in evals/run_evals.py
-```
-
-> `gpt-4` and `gpt-3.5-turbo` were shut down by OpenAI on Oct 23, 2026. The iteration history above was measured with GPT-4 as the answer model; re-run `python evals/run_evals.py` for current scores.
-
----
-
-## Deployment
-
-### Deploy to Vercel
-
-1. Push your code to GitHub
-2. Import repo at [vercel.com](https://vercel.com)
-3. Add environment variables:
-
-```
-OPENAI_API_KEY=sk-...
-PINECONE_API_KEY=...
-PINECONE_INDEX_NAME=paperchat
-```
-
-4. Click **Deploy** — done in under 2 minutes!
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/MerubS/PaperChat)
 
 ---
 
@@ -418,7 +288,7 @@ Contributions are welcome!
 - [OpenAI](https://openai.com) — GPT-5.6 and embeddings API
 - [Pinecone](https://pinecone.io) — Vector database
 - [Next.js](https://nextjs.org) — React framework
-- [Vercel](https://vercel.com) — Deployment platform
+- [AWS](https://aws.amazon.com) — Lambda, Bedrock, S3, CloudFront
 
 ---
 

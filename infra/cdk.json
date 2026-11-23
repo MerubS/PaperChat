@@ -1,0 +1,10 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "chatModelId": "us.openai.gpt-5.6-sol",
+    "evalJudgeModelId": "us.anthropic.claude-sonnet-5",
+    "embedModelId": "amazon.titan-embed-text-v2:0",
+    "pineconeIndexName": "paperchat-bedrock",
+    "alertEmail": ""
+  }
+}

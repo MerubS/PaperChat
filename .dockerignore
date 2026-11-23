@@ -1,0 +1,10 @@
+# Only the backend and eval data go into the Lambda images
+*
+!backend/Dockerfile
+!backend/requirements.txt
+!backend/requirements-evals.txt
+!backend/app/**
+!backend/evals/**
+!evals/dataset.json
+!evals/papers/**
+**/__pycache__
